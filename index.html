@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>4択クイズ（韓国語）</title>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #e0f7fa;
+  overflow: hidden;
+}
+
+/* ===== 50まとめチャプター選択 ===== */
+#chapter50Select {
+  display: none;
+  position: fixed; inset: 0;
+  padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#chapters50 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+/* ===== 詳細チャプター選択 ===== */
+#chapterDetail {
+  display: none;
+  position: fixed; inset: 0;
+  padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#chaptersDetail {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+/* ===== クイズ画面 ===== */
+#quiz {
+  display: none;
+  position: fixed; inset: 0;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+#questionBox {
+  background: #b2ebf2;
+  border: 2px solid #4dd0e1;
+  border-radius: 14px;
+  padding: 20px;
+  font-size: 28px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+#choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+button {
+  font-size: 20px;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #81d4fa;
+  color: #033;
+  box-shadow: 0 3px 5px rgba(0,0,0,0.2);
+}
+
+button:active {
+  transform: scale(0.94);
+}
+
+.correct {
+  background: gold !important;
+}
+.pink {
+  background: pink !important;
+}
+.lightblue {
+  background: #b2ebf2 !important;
+}
+</style>
+</head>
+<body>
+
+<!-- 50まとめチャプター選択 -->
+<div id="chapter50Select">
+  <div id="chapters50"></div>
+</div>
+
+<!-- 詳細チャプター選択 -->
+<div id="chapterDetail">
+  <button id="backTo50">もどる</button>
+  <div id="chaptersDetail" style="margin-top:10px;"></div>
+</div>
+
+<!-- クイズ画面 -->
+<div id="quiz">
+  <div id="questionBox"></div>
+  <div id="choices"></div>
+  <button id="backToDetail" style="margin-top:20px;">詳細チャプターに戻る</button>
+</div>
+
+<script>
+let words = [];       // CSV全単語
+let chapters50 = [];  // 50まとめ
+let currentDetail = []; // 現在詳細チャプター
+let currentQuiz = [];
+let quizIndex = 0;
+
+const chapter50Select = document.getElementById("chapter50Select");
+const chapters50Div = document.getElementById("chapters50");
+
+const chapterDetail = document.getElementById("chapterDetail");
+const chaptersDetailDiv = document.getElementById("chaptersDetail");
+const backTo50 = document.getElementById("backTo50");
+
+const quizDiv = document.getElementById("quiz");
+const questionBox = document.getElementById("questionBox");
+const choicesDiv = document.getElementById("choices");
+const backToDetail = document.getElementById("backToDetail");
+
+let playedChapters = {}; // 遊んだチャプター管理
+let lastPlayed = null;
+
+// CSV読み込み
+fetch("words.csv")
+  .then(r => r.text())
+  .then(text => {
+    words = text.split("\n").map(l => l.split(",")).filter(w => w[0]);
+    // 50まとめ生成
+    for(let i=0; i<words.length; i+=500){
+      chapters50.push(words.slice(i, i+500));
+    }
+    renderChapters50();
+    chapter50Select.style.display = "block";
+  });
+
+// 50まとめ表示
+function renderChapters50(){
+  chapters50Div.innerHTML = "";
+  chapters50.forEach((_, i)=>{
+    const b = document.createElement("button");
+    let start = i*50+1;
+    let end = (i+1)*50;
+    b.textContent = `${start}-${end}`;
+    b.onclick = ()=> renderDetail(i);
+    chapters50Div.appendChild(b);
+  });
+}
+
+// 詳細チャプター表示
+function renderDetail(i50){
+  currentDetail = [];
+  chaptersDetailDiv.innerHTML = "";
+  const subWords = chapters50[i50];
+  for(let i=0; i<subWords.length; i+=10){
+    const b = document.createElement("button");
+    b.textContent = i/10+1;
+    const chapterId = i50*50 + i/10;
+    if(lastPlayed === chapterId) b.classList.add("pink");
+    else if(playedChapters[chapterId]) b.classList.add("lightblue");
+    b.onclick = ()=> startQuiz(i50, i/10);
+    chaptersDetailDiv.appendChild(b);
+    currentDetail.push(subWords.slice(i, i+10));
+  }
+  chapter50Select.style.display = "none";
+  chapterDetail.style.display = "block";
+}
+
+// クイズ開始
+function startQuiz(i50, detailIdx){
+  const chapterId = i50*50 + detailIdx;
+  lastPlayed = chapterId;
+  playedChapters[chapterId] = true;
+  currentQuiz = currentDetail[detailIdx];
+  quizIndex = 0;
+  chapterDetail.style.display = "none";
+  quizDiv.style.display = "block";
+  renderQuiz();
+}
+
+// クイズ表示
+function renderQuiz(){
+  if(quizIndex >= currentQuiz.length){
+    quizIndex = 0; // 循環
+  }
+  const [ko, jp] = currentQuiz[quizIndex];
+  questionBox.textContent = ko;
+  choicesDiv.innerHTML = "";
+  const answers = [jp];
+  while(answers.length<4){
+    const rand = words[Math.floor(Math.random()*words.length)][1];
+    if(!answers.includes(rand)) answers.push(rand);
+  }
+  answers.sort(()=>Math.random()-0.5);
+  answers.forEach(ans=>{
+    const b = document.createElement("button");
+    b.textContent = ans;
+    b.onclick = ()=>{
+      if(ans===jp) b.classList.add("correct");
+      setTimeout(()=>{
+        quizIndex++;
+        renderQuiz();
+      }, 300);
+    };
+    choicesDiv.appendChild(b);
+  });
+}
+
+// 戻る
+backTo50.onclick = ()=>{
+  chapterDetail.style.display = "none";
+  chapter50Select.style.display = "block";
+};
+
+backToDetail.onclick = ()=>{
+  quizDiv.style.display = "none";
+  chapterDetail.style.display = "block";
+};
+</script>
+</body>
+</html>
