@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>韓国語4択クイズ</title>
+<style>
+html, body {
+  margin:0; padding:0; height:100%; font-family:-apple-system, BlinkMacSystemFont, sans-serif; background:#e0f7fa; overflow:hidden;
+}
+button{cursor:pointer;}
+
+/* ===== チャプター選択 ===== */
+#chapterSelect{
+  position:fixed; inset:0; padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
+  box-sizing:border-box; overflow-y:auto;
+}
+#chapters{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+.chapter-btn{aspect-ratio:1/1; font-size:22px; border-radius:12px; border:none; background:#81d4fa; color:#033; box-shadow:0 3px 5px rgba(0,0,0,0.2);}
+.chapter-btn.correct{background:gold;}
+.chapter-btn:active{transform:scale(0.94);}
+
+/* ===== クイズ画面 ===== */
+#quiz{display:none; position:fixed; inset:0;}
+#quizHeader{position:absolute; top:10px; left:10px; font-size:16px; text-align:left;}
+#wordArea{
+  position:absolute;
+  top:85px; /* ← 50px → 85px に変更して35px下にずらす */
+  left:0; right:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:20px;
+  height:calc(100% - 120px); box-sizing:border-box;
+}
+#quizWord{font-size:40px; background:#b2ebf2; padding:20px 24px; border-radius:14px; border:2px solid #4dd0e1; text-align:center; word-break:break-word; max-width:80%;}
+#choices{display:flex; flex-direction:column; align-items:center; gap:14px;}
+.choice{font-size:20px; padding:12px 16px; border-radius:12px; border:none; background:#fff; box-shadow:0 3px 5px rgba(0,0,0,0.2); min-width:200px;}
+.choice.correct{background:#b9f6ca;}
+.choice.wrong{background:#ffcdd2;}
+#backBtn{position:absolute; bottom:16px; left:50%; transform:translateX(-50%); font-size:20px; padding:10px 18px; border-radius:10px; border:none; background:#81d4fa; color:#033; box-shadow:0 3px 5px rgba(0,0,0,0.2);}
+#backBtn:active{transform:scale(0.94);}
+
+/* ===== 結果画面 ===== */
+#result{display:none; position:fixed; inset:0; padding:10px; box-sizing:border-box;}
+#resultArea{margin-top:10px; width:80%; max-width:600px; margin-left:auto; margin-right:auto; display:flex; flex-direction:column; gap:6px;}
+.result-item{display:flex; justify-content:space-between; padding:6px 12px; border-radius:8px; background:#fff;}
+.result-item.correct{background:#b9f6ca;}
+.result-item.wrong{background:#ffcdd2;}
+#resultControls{display:flex; justify-content:space-between; margin-top:10px;}
+#resultControls button{flex:1; margin:0 5px; font-size:18px; padding:10px; border-radius:10px; border:none; background:#81d4fa; color:#033; box-shadow:0 3px 5px rgba(0,0,0,0.2);}
+#resultControls button:active{transform:scale(0.94);}
+</style>
+</head>
+<body>
+
+<!-- チャプター選択 -->
+<div id="chapterSelect">
+  <div id="chapters"></div>
+</div>
+
+<!-- クイズ画面 -->
+<div id="quiz">
+  <div id="quizHeader"></div>
+  <div id="wordArea">
+    <div id="quizWord"></div>
+    <div id="choices"></div>
+  </div>
+  <button id="backBtn">チャプターに戻る</button>
+</div>
+
+<!-- 結果画面 -->
+<div id="result">
+  <div id="resultArea"></div>
+  <div id="resultControls">
+    <button id="toChapter">チャプター選択に戻る</button>
+    <button id="retry">もう一度解く</button>
+    <button id="nextChapter">次のチャプター</button>
+  </div>
+</div>
+
+<script>
+let words=[]; let chapters=[]; let currentChapter=[]; let chapterIndex=0;
+let quizIndex=0; let results=[]; let currentQuiz=null;
+
+const chaptersDiv=document.getElementById("chapters");
+const chapterSelect=document.getElementById("chapterSelect");
+const quiz=document.getElementById("quiz");
+const quizWord=document.getElementById("quizWord");
+const choicesDiv=document.getElementById("choices");
+const quizHeader=document.getElementById("quizHeader");
+const backBtn=document.getElementById("backBtn");
+
+const result=document.getElementById("result");
+const resultArea=document.getElementById("resultArea");
+const toChapter=document.getElementById("toChapter");
+const retry=document.getElementById("retry");
+const nextChapter=document.getElementById("nextChapter");
+
+/* CSV読み込み */
+fetch("words.csv").then(r=>r.text()).then(text=>{
+  words=text.split("\n").map(l=>l.split(",")).filter(w=>w[0]);
+  for(let i=0;i<words.length;i+=10) chapters.push(words.slice(i,i+10));
+  renderChapters();
+  loadClearedChapters();
+});
+
+/* チャプター表示 */
+function renderChapters(){
+  chaptersDiv.innerHTML="";
+  chapters.forEach((_,i)=>{
+    const b=document.createElement("button");
+    b.textContent=i+1;
+    b.className="chapter-btn";
+    b.onclick=()=>startChapter(i);
+    chaptersDiv.appendChild(b);
+  });
+}
+
+/* 開始 */
+function startChapter(i){
+  chapterIndex=i; quizIndex=0; results=[]; currentChapter=chapters[i];
+  chapterSelect.style.display="none"; quiz.style.display="block";
+  renderQuiz();
+}
+
+/* クイズ表示 */
+function renderQuiz(){
+  currentQuiz=currentChapter[quizIndex];
+  quizWord.textContent=currentQuiz[0];
+  quizHeader.innerHTML=`チャプター ${chapterIndex+1}<br>${quizIndex+1}/10`;
+
+  choicesDiv.innerHTML="";
+  let choiceList=[currentQuiz[1]];
+  while(choiceList.length<4){
+    const w=words[Math.floor(Math.random()*words.length)][1];
+    if(!choiceList.includes(w)) choiceList.push(w);
+  }
+  choiceList.sort(()=>Math.random()-0.5);
+
+  choiceList.forEach(c=>{
+    const b=document.createElement("button");
+    b.className="choice";
+    b.textContent=c;
+    b.onclick=()=>checkAnswer(b,c===currentQuiz[1]);
+    choicesDiv.appendChild(b);
+  });
+}
+
+/* 回答チェック */
+function checkAnswer(btn,correct){
+  document.querySelectorAll(".choice").forEach(b=>b.disabled=true);
+  btn.classList.add(correct?"correct":"wrong");
+  results.push({word:currentQuiz[0], answer:currentQuiz[1], correct});
+  setTimeout(()=>{
+    quizIndex++;
+    if(quizIndex<currentChapter.length) renderQuiz();
+    else showResults();
+  },800);
+}
+
+/* 結果表示 */
+function showResults(){
+  quiz.style.display="none"; result.style.display="block";
+  resultArea.innerHTML="";
+  results.forEach(r=>{
+    const div=document.createElement("div");
+    div.className="result-item "+(r.correct?"correct":"wrong");
+    div.innerHTML=`<span>${r.word}</span><span>${r.answer}</span><span>${r.correct?"⚪︎":"×"}</span>`;
+    resultArea.appendChild(div);
+  });
+
+  // 全問正解ならチャプター金色
+  if(results.every(r=>r.correct)){
+    chaptersDiv.children[chapterIndex].classList.add("correct");
+    let cleared=JSON.parse(localStorage.getItem("clearedChapters")||"[]");
+    if(!cleared.includes(chapterIndex)){
+      cleared.push(chapterIndex);
+      localStorage.setItem("clearedChapters",JSON.stringify(cleared));
+    }
+  }
+}
+
+/* チャプター戻る */
+backBtn.onclick=()=>{
+  quiz.style.display="none"; chapterSelect.style.display="block";
+}
+
+/* 結果画面ボタン */
+toChapter.onclick=()=>{result.style.display="none"; chapterSelect.style.display="block";}
+retry.onclick=()=>{result.style.display="none"; startChapter(chapterIndex);}
+nextChapter.onclick=()=>{result.style.display="none"; startChapter((chapterIndex+1)%chapters.length);}
+
+/* ページ読み込み時に全問正解済みチャプターを金色 */
+function loadClearedChapters(){
+  let cleared=JSON.parse(localStorage.getItem("clearedChapters")||"[]");
+  cleared.forEach(i=>{
+    if(chaptersDiv.children[i]) chaptersDiv.children[i].classList.add("correct");
+  });
+}
+</script>
+
+</body>
+</html>
